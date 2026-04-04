@@ -51,14 +51,15 @@ class Router:
             for route in self.rib[pfx]:
                 print(route) 
 
+
     # TASK
     def update(self, rt):
         # Get the prefix in a.b.c.d/x format for the route 
         prefix = rt.pfx_str()
 
-        # If the prefix is not in the router, create a key with empty value.
+        # If the prefix is not in the router, create a key with an empty list.
         if prefix not in self.rib:
-            self.rib[prefix] = [rt]
+            self.rib[prefix] = []
 
         # Check if the route from the same neighbor already exists, if so, update it. 
         for index, route in enumerate(self.rib[prefix]):
@@ -66,10 +67,10 @@ class Router:
                 self.rib[prefix][index] = rt
                 return
         
-        # Otherwise, add the new route to the list for that prefix.
+        # If no existing neighbor has this route, add this route to the prefix
         self.rib[prefix].append(rt)
         return
-
+        
     # TASK    
     def withdraw(self, rt):
         # Get the prefix in a.b.c.d/x format for the route
@@ -80,7 +81,7 @@ class Router:
             return
 
         # Update list just including routes that are not from the neighbor specified in the withdraw message
-        self.rib[prefix] = [r for r in self.rib[prefix] if r.neighbor != rt.neighbor]
+        self.rib[prefix] = [r for r in self.rib[prefix] if (r.neighbor != rt.neighbor)]
 
         # If no routes remain for this prefix, remove the prefix key itself
         if len(self.rib[prefix]) == 0:
@@ -101,39 +102,37 @@ class Router:
     # then find shortest path of routes for that prefix
     def next_hop(self, ipaddr):
         retval = None
-        ip_bin = self.convertToBinaryString(ipaddr)
+        longest = 0
 
-        best_pfx = None
-        best_len = -1
+        # Iterate through the whole list of destinations
+        for pfx in self.rib.keys():
+            # Split the prefix string into an IP address and a prefix length variables
+            prefix, pfx_len = pfx.split("/")
+            # Cast prefix length string into an integer for upcoming operations
+            pfx_len = int(pfx_len)
 
-        # Longest Prefix Match
-        for pfx, routes in self.rib.items():
-            if not routes:
-                continue
+            # If the binary portion of the IP address, up to the prefix length, matches the binary portion of the prefix,then we have a match
+            if self.convertToBinaryString(ipaddr)[:pfx_len] == self.convertToBinaryString(prefix)[:pfx_len]:
+                # If this is the longest prefix so far, update the return value
+                if pfx_len > longest:
+                    # Update longest prefix length so far
+                    longest = pfx_len
+                    # Initialize the route length variable to None for this prefix, so we can find the shortest path for this prefix
+                    route_len = None
 
-            pfx_ip, pfx_len_str = pfx.split("/")
-            pfx_len = int(pfx_len_str)
-            pfx_bin = self.convertToBinaryString(pfx_ip)
-
-            if ip_bin[:pfx_len] == pfx_bin[:pfx_len]:
-                if pfx_len > best_len:
-                    best_len = pfx_len
-                    best_pfx = pfx
-
-        if best_pfx is None:
-            return None
-
-        # Best path for that prefix = shortest AS path
-        best_route = min(self.rib[best_pfx], key=lambda r: len(r.path))
-        retval = best_route.neighbor
+                    # Iterate through the routes available to get to this destination
+                    for route in self.rib[pfx]:
+                        # Find the shortest path for this prefix
+                        if (route_len == None) or (len(route.path) < route_len):
+                            # Update the route length variable to the length of this path, since it is the shortest so far for this prefix
+                            route_len = len(route.path)
+                            # Update the return value to the neighbor for this route, since it is the best route so far for this prefix
+                            retval = route.neighbor
 
         return retval
-    
+
 def test_cases():
     rtr = Router()
-
-    print("Test 1: Withdraw non-existant route")
-    rtr.printRIB()
 
     #Test that withdrawing a non-existant route works
     rtr.withdraw (Route("1.1.1.1", "10.0.0.0", 24, [3,4,5]))
@@ -142,27 +141,24 @@ def test_cases():
     rtr.update (Route("1.1.1.1", "10.0.0.0", 24, [3,4,5]))
     rtr.update (Route("2.2.2.2", "10.0.0.0", 24, [1,2]))
 
-    print("Test 2: Two routes for the same prefix")
-    rtr.printRIB()
+    # print("RIB")
+    # rtr.printRIB()
 
     #Test updates work - overwriting an existing route from a neighbor
     rtr.update (Route("2.2.2.2", "10.0.0.0", 24, [1, 22, 33, 44]))
 
-    print("Test 3: Update existing route from a neighbor")
-    rtr.printRIB()
+    # print("RIB")
+    # rtr.printRIB()
 
     #Test updates work - an overlapping prefix (this case, a shorter prefix)
     rtr.update (Route("2.2.2.2", "10.0.0.0", 22, [4,5,7,8]))
-    
-    print("Test 4: Overlapping prefix (shorter prefix)")
-    rtr.printRIB()
 
     #Test updates work - completely different prefix
     rtr.update (Route("2.2.2.2", "12.0.0.0", 16, [4,5]))
     rtr.update (Route("1.1.1.1", "12.0.0.0", 16, [1, 2, 30]))
 
-    print("Test 5: Different prefix")
-    rtr.printRIB()
+    # print("RIB")
+    # rtr.printRIB()
 
     # Should not return an ip
     nh = rtr.next_hop("10.2.0.13")
@@ -175,9 +171,6 @@ def test_cases():
     # Test withdraw - withdraw the route from 1.1.1.1 that we just matched
     rtr.withdraw (Route("1.1.1.1", "10.0.0.0", 24, [3,4,5]))
 
-    print("Test 6: Withdraw a route")
-    rtr.printRIB()
-
     # Should match something different
     nh = rtr.next_hop("10.0.0.13")
     assert nh == "2.2.2.2"
@@ -185,6 +178,7 @@ def test_cases():
     # Re-announce - so, 1.1.1.1 would now be best route
     rtr.withdraw (Route("1.1.1.1", "10.0.0.0", 24, [3,4,5]))
 
+    
     rtr.update (Route("2.2.2.2", "10.0.0.0", 22, [4,5,7,8]))
     # Should match 10.0.0.0/22 (next hop 2.2.2.2) but not 10.0.0.0/24 (next hop 1.1.1.1)
     nh = rtr.next_hop("10.0.1.77")
@@ -203,12 +197,12 @@ def test_cases():
     nh = rtr.next_hop("20.0.12.0")
     assert nh == "1.1.1.1"
 
+
     # Remember to delete the entry from the RIB, not just removing the specific route
     # That is, when you withdraw, remove the route for the prefix, and if there are 0 routes, remove the prefix from the RIB
     rtr.withdraw(Route("1.1.1.1", "20.0.12.0", 24, [44,55,66,77,88]))
     nh = rtr.next_hop("20.0.12.0")
     assert nh == "2.2.2.2"
-
 
 if __name__ == "__main__":
     test_cases()
