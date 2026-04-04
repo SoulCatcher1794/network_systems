@@ -54,31 +54,37 @@ class Router:
     # TASK
     def update(self, rt):
         # Get the prefix in a.b.c.d/x format for the route 
-        route = rt.pfx_str()
+        prefix = rt.pfx_str()
+
         # If the prefix is not in the router, create a key with empty value.
-        if route not in self.rib:
-            self.rib[route] = []
+        if prefix not in self.rib:
+            self.rib[prefix] = [rt]
+
         # Check if the route from the same neighbor already exists, if so, update it. 
-        for i, route in enumerate(self.rib[route]):
+        for index, route in enumerate(self.rib[prefix]):
             if route.neighbor == rt.neighbor:
-                self.rib[route][i] = rt
+                self.rib[prefix][index] = rt
                 return
+        
         # Otherwise, add the new route to the list for that prefix.
-        self.rib[route].append(rt)
+        self.rib[prefix].append(rt)
         return
 
     # TASK    
     def withdraw(self, rt):
-        route_prefix = rt.pfx_str()
-        if route_prefix not in self.rib:
+        # Get the prefix in a.b.c.d/x format for the route
+        route = rt.pfx_str()
+
+        # If the prefix is not in the router, then there is nothing to withdraw, so return.
+        if route not in self.rib:
             return
 
         # Remove route(s) for this prefix coming from the same neighbor
-        self.rib[route_prefix] = [route for route in self.rib[route_prefix] if route.neighbor != rt.neighbor]
+        self.rib[route] = [r for r in self.rib[route] if r.neighbor != rt.neighbor]
 
         # If no routes remain for this prefix, remove the prefix key itself
-        if len(self.rib[route_prefix]) == 0:
-            del self.rib[route_prefix]
+        if len(self.rib[route]) == 0:
+            del self.rib[route]
 
         return 
     
