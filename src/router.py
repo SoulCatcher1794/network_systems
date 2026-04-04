@@ -73,18 +73,18 @@ class Router:
     # TASK    
     def withdraw(self, rt):
         # Get the prefix in a.b.c.d/x format for the route
-        route = rt.pfx_str()
+        prefix = rt.pfx_str()
 
-        # If the prefix is not in the router, then there is nothing to withdraw, so return.
-        if route not in self.rib:
+        # If the prefix is not in the router, then there is nothing to withdraw.
+        if prefix not in self.rib:
             return
 
-        # Remove route(s) for this prefix coming from the same neighbor
-        self.rib[route] = [r for r in self.rib[route] if r.neighbor != rt.neighbor]
+        # Update list just including routes that are not from the neighbor specified in the withdraw message
+        self.rib[prefix] = [r for r in self.rib[prefix] if r.neighbor != rt.neighbor]
 
         # If no routes remain for this prefix, remove the prefix key itself
-        if len(self.rib[route]) == 0:
-            del self.rib[route]
+        if len(self.rib[prefix]) == 0:
+            del self.rib[prefix]
 
         return 
     
